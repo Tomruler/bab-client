@@ -3,9 +3,12 @@
 use std::fs::File;
 use std::path::Path;
 use std::io::prelude::*;
+use rev_lines::RevLines;
+
 use eframe::egui;
 use tokio::runtime::Runtime;
 
+use std::time::{Duration, SystemTime};
 
 use buttplug::{
     client::{device::ScalarValueCommand, ButtplugClient, ButtplugClientError},
@@ -74,7 +77,31 @@ fn main() -> Result<(), eframe::Error> {
         Err(why) => panic!("couldn't read {}: {}", display, why),
         Ok(_) => print!("{} contains:\n{}", display, s),
     }
+    println!("\n");
+    let rev_lines = RevLines::new(file);
+    for line in rev_lines {
+      match line{
+        Err(ref why) => println!("Error when reading {}: {}", display, why),
+        Ok(ref line_str) => println!("{}", line_str),
+      }
+      println!("{:?}", line);
+      
+    }
 
+    let path2 = Path::new("resources/filetest2.txt");
+    let display2 = path2.display();
+
+    let mut file2 = match File::open(&path2){
+        Err(why) => panic!("couldn't open {}: {}", display2, why),
+        Ok(file2) => file2,
+    };
+
+    let mut s2 = String::new();
+    match file2.read_to_string(&mut s2) {
+        Err(why) => panic!("couldn't read {}: {}", display2, why),
+        Ok(_) => print!("{} contains:\n{}", display2, s),
+    }
+    println!("\n");
 
     // First try at executing async code in sync context
     // let rt = tokio::runtime::Builder::new_current_thread().enable_all().build();
@@ -83,7 +110,7 @@ fn main() -> Result<(), eframe::Error> {
     // let bp_client = BPIntifaceClient;
     // bp_client.connect();
     eframe::run_native(
-        "My egui App",
+        "Beyond All Buttplug Client",
         options,
         Box::new(|cc| {
             // This gives us image support:
@@ -99,6 +126,8 @@ struct MyApp {
     name: String,
     age: u32,
     bp_client: Option<BPIntifaceClient>,
+    update_ticks: u32,
+    file_text: Option<String>,
 }
 
 impl Default for MyApp {
@@ -107,6 +136,8 @@ impl Default for MyApp {
             name: "Arthur".to_owned(),
             age: 42,
             bp_client: None,
+            update_ticks: 0,
+            file_text: None,
         }
     }
 
@@ -121,29 +152,63 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.update_ticks+=1;
+        ctx.request_repaint_after(std::time::Duration::from_micros((1.0/60.0*1000000.0) as u64));
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("My egui Application");
-            ui.horizontal(|ui| {
-                let name_label = ui.label("Your name: ");
-                ui.text_edit_singleline(&mut self.name)
-                    .labelled_by(name_label.id);
-            });
-            ui.add(egui::Slider::new(&mut self.age, 0..=120).text("age"));
-            if ui.button("Increment").clicked() {
-                self.age += 1;
-                self.bp_client.as_mut().unwrap().vibrate();
-            }
+            ui.heading("Beyond All Buttplug Client");
+            // ui.horizontal(|ui| {
+            //     let name_label = ui.label("Your name: ");
+            //     ui.text_edit_singleline(&mut self.name)
+            //         .labelled_by(name_label.id);
+            // });
+            // ui.add(egui::Slider::new(&mut self.age, 0..=120).text("age"));
+            // if ui.button("Increment").clicked() {
+            //     self.age += 1;
+            //     // self.bp_client.as_mut().unwrap().vibrate();
+            // }
+
             if ui.button("Connect").clicked() {
               self.bp_client = Some(BPIntifaceClient{
                 client:None, rt:None
               });
               self.bp_client.as_mut().unwrap().connect();
             }
+            if ui.button("Vibrate").clicked() {
+              match self.bp_client.as_mut()
+              {
+                None => println!("Not connected"),
+                Some(client) => client.vibrate(),
+              }
+              // self.bp_client.as_mut().unwrap().vibrate();
+          }
             if ui.button("Stop").clicked() {
               self.bp_client.as_mut().unwrap().stop();
             }
-            ui.label(format!("Hello '{}', age {}", self.name, self.age));
+            if ui.button("Display File").clicked()
+            {
+              let path = Path::new("filetest.txt");
+              let display = path.display();
 
+              let mut file = match File::open(&path){
+                  Err(why) => panic!("couldn't open {}: {}", display, why),
+                  Ok(file) => file,
+              };
+
+              self.file_text = Some(String::new());
+              match file.read_to_string(&mut self.file_text.as_mut().unwrap()) {
+                  Err(why) => panic!("couldn't read {}: {}", display, why),
+                  Ok(_) => print!("{} contains:\n{}", display, self.file_text.as_mut().unwrap()),
+              };
+              println!("\n");
+            }
+
+            // ui.label(format!("Hello '{}', age {}", self.name, self.age));
+            ui.label(format!("Ticks passed: {}", self.update_ticks));
+            match &self.file_text{
+              None => ui.label(format!("No file currently loaded.")),
+              Some(text_string) => ui.label(format!("File contains:\n{}", text_string)),
+            };
+            
             ui.image(egui::include_image!(
                 "../resources/neco.png"
             ));

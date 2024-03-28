@@ -508,6 +508,7 @@ dependencies = [
  "egui_extras",
  "env_logger",
  "futures",
+ "rev_lines",
  "tokio",
  "tracing-subscriber",
 ]
@@ -2079,7 +2080,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.6",
  "tokio",
  "tower-service",
  "tracing",
@@ -3382,6 +3383,15 @@ dependencies = [
  "web-sys",
  "webpki-roots 0.25.4",
  "winreg",
+]
+
+[[package]]
+name = "rev_lines"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed62916ac7a5ccbf13fa5e1d303029ff015600fee841756dfc134a1ac62bf05f"
+dependencies = [
+ "thiserror",
 ]
 
 [[package]]
