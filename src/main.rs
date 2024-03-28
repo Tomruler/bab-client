@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use std::fs::File;
+use std::path::Path;
+use std::io::prelude::*;
 use eframe::egui;
 use tokio::runtime::Runtime;
 
@@ -45,6 +48,10 @@ impl BPIntifaceClient
   {
     self.rt.as_mut().unwrap().block_on(vibrate_buttplug(&self.client.as_mut().unwrap()));
   }
+  pub fn stop(&mut self)
+  {
+    self.rt.as_mut().unwrap().block_on(stop_buttplug(&self.client.as_mut().unwrap()));
+  }
 }
 
 fn main() -> Result<(), eframe::Error> {
@@ -53,6 +60,21 @@ fn main() -> Result<(), eframe::Error> {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
     };
+
+    let path = Path::new("filetest.txt");
+    let display = path.display();
+
+    let mut file = match File::open(&path){
+        Err(why) => panic!("couldn't open {}: {}", display, why),
+        Ok(file) => file,
+    };
+
+    let mut s = String::new();
+    match file.read_to_string(&mut s) {
+        Err(why) => panic!("couldn't read {}: {}", display, why),
+        Ok(_) => print!("{} contains:\n{}", display, s),
+    }
+
 
     // First try at executing async code in sync context
     // let rt = tokio::runtime::Builder::new_current_thread().enable_all().build();
@@ -116,6 +138,9 @@ impl eframe::App for MyApp {
                 client:None, rt:None
               });
               self.bp_client.as_mut().unwrap().connect();
+            }
+            if ui.button("Stop").clicked() {
+              self.bp_client.as_mut().unwrap().stop();
             }
             ui.label(format!("Hello '{}', age {}", self.name, self.age));
 
@@ -272,6 +297,7 @@ async fn connect_buttplug() -> Result<ButtplugClient, ButtplugClientError>
 
 async fn vibrate_buttplug(client: &ButtplugClient) -> Result<bool, ButtplugClientError>
 {
+
   println!("Sending commands");
   
     // Now that we know the message types for our connected device, we
@@ -327,4 +353,19 @@ async fn vibrate_buttplug(client: &ButtplugClient) -> Result<bool, ButtplugClien
     //   println!("Tried to send after disconnection! Error: ");
     //   println!("{}", error);
     // }
+}
+
+async fn stop_buttplug(client: &ButtplugClient) -> Result<bool, ButtplugClientError>
+{
+  println!("Sending commands");
+  
+    // Now that we know the message types for our connected device, we
+    // can send a message over! Seeing as we want to stick with the
+    // modern generic messages, we'll go with VibrateCmd.
+    //
+    // There's a couple of ways to send this message.
+    let test_client_device = &client.devices()[0];
+    test_client_device.stop().await?;
+  println!("Stopped");
+  Ok(true)
 }
