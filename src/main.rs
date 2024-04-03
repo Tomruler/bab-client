@@ -8,18 +8,89 @@ use rev_lines::RevLines;
 use eframe::egui;
 use tokio::runtime::Runtime;
 
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use buttplug::{
     client::{device::ScalarValueCommand, ButtplugClient, ButtplugClientError},
     core::{
-      connector::{
-        new_json_ws_client_connector,
-      },
-      message::{ClientGenericDeviceMessageAttributes},
+      connector::new_json_ws_client_connector,
+      message::ClientGenericDeviceMessageAttributes,
     },
   };
 // use buttplug::core::connector::ButtplugConnectorError;
+
+enum BPActionType
+{
+  Stop,
+  Vibrate{strength: f64, motor: u8},
+  Power{strength: f64, motor: u8},
+  Stroke,
+}
+
+enum BPEffectorType
+{
+  Vibrates,
+  Strokes,
+}
+
+struct BPSimEvent
+{
+  finished: bool,
+  time_remaining: Duration,
+  action: BPActionType,
+}
+
+impl BPSimEvent
+{
+  pub fn new(initial_duration: Duration, action: BPActionType) -> BPSimEvent
+  {
+    BPSimEvent{finished:false, time_remaining:initial_duration, action:action}
+  }
+  pub fn new_stop_event() -> BPSimEvent
+  {
+    BPSimEvent{finished:true, time_remaining:Duration::ZERO, action:BPActionType::Stop}
+  }
+}
+
+struct BPEffector
+{
+  effector_type: BPEffectorType,
+  index: i8,
+}
+
+struct BPSimulator
+{
+  events: Vec<BPSimEvent>,
+  effectors: Vec<BPEffector>,
+  last_sim_instant: Instant,
+  formula_threshold: f64,
+  formula_half_life_vib: Duration,
+  formula_linear_reduction_vib: f64
+}
+
+impl Default for BPSimulator
+{
+  fn default() -> BPSimulator{
+    BPSimulator{
+      events: Vec::new(), 
+      effectors: Vec::new(), 
+      last_sim_instant:std::time::Instant::now(), 
+      formula_threshold:0.01 as f64,
+      formula_half_life_vib:Duration::from_millis(200),
+      formula_linear_reduction_vib:0.005 as f64,
+    }
+  }
+}
+
+impl BPSimulator
+{
+  pub fn add_event()
+  {
+
+  }
+}
+
+
 
 pub struct BPIntifaceClient
 {
