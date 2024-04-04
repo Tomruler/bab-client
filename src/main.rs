@@ -1,18 +1,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
-
+//IO
 use std::fs::File;
+use std::hash::Hash;
+use std::iter::Map;
 use std::path::Path;
 use std::io::prelude::*;
 use eframe::egui::debug_text::print;
 use rev_lines::RevLines;
-
+//UI
 use eframe::egui;
 use tokio::{runtime::Runtime, time};
-
+//Timing
 use std::time::{Duration, Instant, SystemTime};
-
+//Math
 use std::cmp;
-
+//Data Structures
+use std::collections::HashMap;
+//Buttplug Lib
 use buttplug::{
     client::{device::ScalarValueCommand, ButtplugClient, ButtplugClientError},
     core::{
@@ -32,7 +36,7 @@ enum BPActionType
 #[derive(Debug)]
 enum BPEffectorType
 {
-  Vibrates{intensity: f64, floor: f64},
+  Vibrates{intensity: f64},
   Strokes{amplitude: f64},
 }
 #[derive(Debug)]
@@ -80,7 +84,8 @@ struct BPSimulator
   last_sim_instant: Instant,
   formula_threshold: f64,
   formula_half_life_vib: Duration,
-  formula_linear_reduction_vib: f64
+  formula_linear_reduction_vib: f64,
+  formula_floor_cache: HashMap<i8, f64>,
 }
 
 impl Default for BPSimulator
@@ -93,6 +98,7 @@ impl Default for BPSimulator
       formula_threshold:0.01 as f64,
       formula_half_life_vib:Duration::from_millis(200),
       formula_linear_reduction_vib:0.005 as f64,
+      formula_floor_cache: HashMap::new(),
     }
   }
 }
@@ -102,14 +108,36 @@ impl BPSimulator
   pub fn add_event(&mut self, event: BPSimEvent)
   {
     println!("Event added: {event:?}");
-    self.events.push(event);
     //process the effects of adding this event
-    //add initial value to effector
-    //
+      //add initial value to effector
+    match event.action
+    {
+      BPActionType::Vibrate { strength, motor } => {
+        println!("Adding vibration event");
+        //TODO
+      },
+      BPActionType::Power { strength, motor } => {
+        println!("Adding vibration power event");
+        //TODO
+      },
+      BPActionType::Stop => {
+        println!("Stop recieved, clearing all events and resetting all intensities");
+        self.force_stop();
+        return;
+      },
+      BPActionType::Stroke => {
+        println!("Stroke event not yet supported");
+      },
+    };
+    self.events.push(event);
   }
   pub fn add_effector(&mut self, effector: BPEffector)
   {
     println!("Effector added: {effector:?}");
+    match effector.effector_type {
+      BPEffectorType::Vibrates {..} => self.formula_floor_cache.insert(effector.index, 0 as f64),
+      BPEffectorType::Strokes {..} => None,
+    };
     self.effectors.push(effector);
   }
   pub fn process_tick(&mut self, current_instant: Instant)
@@ -120,7 +148,7 @@ impl BPSimulator
                                           return},
       Some(dur) => dur,
     };
-    if time_passed > Duration::from_millis(1000/30)
+    if time_passed > Duration::from_millis(1000/10)
     {
       println!("Unusually long tick: {time_passed:?}");
     }
@@ -141,17 +169,22 @@ impl BPSimulator
   }
   fn update_effectors(&mut self, time_passed: Duration)
   {
-    //TODO: Implement
     for effector in self.effectors.iter_mut()
     {
-      //TODO: Do something
       match effector.effector_type
       {
-        BPEffectorType::Vibrates{ref mut intensity, floor} => {
+        BPEffectorType::Vibrates{ref mut intensity} => {
           //Half life decay
           *intensity = BPSimulator::calc_intensity_decay(time_passed, *intensity, self.formula_linear_reduction_vib, self.formula_half_life_vib);
+          debug_assert!(
+            match self.formula_floor_cache.get(&effector.index)
+            {
+              None => false,
+              Some(_) => true,
+            }
+          , "This vibrator was incorrectly initialized! It doesn't have a floor value.");
           //Must be at minimum equal to currently active events
-          *intensity = f64::max(*intensity, floor);
+          *intensity = f64::max(*intensity, *(self.formula_floor_cache.get(&effector.index).unwrap()));
         },
         BPEffectorType::Strokes{amplitude} => {
           //Not implemented yet
@@ -178,16 +211,37 @@ impl BPSimulator
     return new_intensity;
   }
 
-  fn vibration_intensity_floor(self, effector_index: i8) -> f64
+  fn update_intensity_floor(&mut self, index: i8, intensity_change: f64)
   {
-    //TODO
-    return 0 as f64;
+    if index == -1
+    {
+      for (_, original_intensity) in self.formula_floor_cache.iter_mut()
+      {
+        *original_intensity = f64::max(*original_intensity + intensity_change, 0 as f64);
+      }
+    }
+    else 
+    {
+        match self.formula_floor_cache.get_mut(&index)
+        {
+          None => {
+            println!("Missing intensity floor for index {}", index)
+          },
+          Some(intensity) => {*intensity = f64::max(*intensity + intensity_change, 0 as f64);},
+        }
+    }
   }
-
-  fn calc_vibration_intensity_floor(effector_index: i8, events: Vec<BPSimEvent>) -> f64
+  //Clear all events, set all intensities to 0
+  pub fn force_stop(&mut self)
   {
-    //TODO
-    return 0 as f64;
+    println!("Force stopping");
+    println!("Events to remove: {}", self.events.len());
+    self.events.clear();
+    for (_, intensity) in self.formula_floor_cache.iter_mut()
+    {
+      *intensity = 0 as f64;
+    }
+    //TODO: Force stop for other components
   }
 }
 

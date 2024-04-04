@@ -20,3 +20,9 @@ IO delays
     - The local windows filesystem is completely synchronous - there is no advantage to async for local file access 
       (and it only makes things more complicated)
     - The BAR lua system is capable of writing once per frame at 30 fps.
+
+Command fluttering
+    - Should batches of new commands be executed simultaneously or artificially delayed? Since the Lua code is capable of
+    file writes as fast as the game is updated, assume that commands are read in real time, thus no time travel is needed.
+    - Consider artifically slowed down file update speed? No, command fluttering at the moment is too complex to implement for
+    marginal benefits.
