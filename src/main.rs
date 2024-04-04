@@ -204,6 +204,7 @@ impl BPSimulator {
                 }
                 Some(ev) => {
                     if !ev.finished {
+                        index +=1;
                         continue;
                     }
                 }
@@ -227,7 +228,8 @@ impl BPSimulator {
                 BPActionType::Stroke => {
                     println!("Stroke event not yet supported");
                 }
-            };
+            }
+          index +=1;
         }
         //remove finished events
         let precull_event_count = self.events.len();
@@ -260,6 +262,7 @@ impl BPSimulator {
     }
 
     fn update_intensity_floor(&mut self, index: i8, intensity_change: f64) {
+      println!("Updating intensity for motor {} by {}", index, intensity_change);
         if index == -1 {
             for (_, original_intensity) in self.formula_floor_cache.iter_mut() {
                 *original_intensity = f64::max(*original_intensity + intensity_change, 0 as f64);
@@ -331,6 +334,14 @@ impl BPIntifaceClient {
             .unwrap()
             .block_on(stop_buttplug(&self.client.as_mut().unwrap()));
     }
+
+    pub fn device_vibration_strengths(&mut self, strengths:Vec<f64>)
+    {
+      self.rt
+            .as_mut()
+            .unwrap()
+            .block_on(device_set_vibration_strengths(&self.client.as_mut().unwrap(), strengths));
+    }
 }
 
 struct MyApp {
@@ -340,6 +351,8 @@ struct MyApp {
     bp_sim: BPSimulator,
     update_ticks: u32,
     file_text: Option<String>,
+    debug_event_millis: u64,
+    debug_event_strength: f64,
 }
 
 impl Default for MyApp {
@@ -351,6 +364,8 @@ impl Default for MyApp {
             bp_sim: Default::default(),
             update_ticks: 0,
             file_text: None,
+            debug_event_millis: 500,
+            debug_event_strength: 0.5,
         }
     }
 
@@ -366,6 +381,7 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.update_ticks += 1;
+        self.bp_sim.process_tick(std::time::Instant::now());
         ctx.request_repaint_after(std::time::Duration::from_micros(
             (1.0 / 60.0 * 1000000.0) as u64,
         ));
@@ -381,7 +397,7 @@ impl eframe::App for MyApp {
             //     self.age += 1;
             //     // self.bp_client.as_mut().unwrap().vibrate();
             // }
-
+            
             if ui.button("Connect").clicked() {
                 self.bp_client = Some(BPIntifaceClient {
                     client: None,
@@ -419,6 +435,15 @@ impl eframe::App for MyApp {
                 };
                 println!("\n");
             }
+            //Debug panel
+            ui.add(egui::Slider::new(&mut self.debug_event_millis, 100..=5000).text("Debug Event Duration (millis)"));
+            ui.add(egui::Slider::new(&mut self.debug_event_strength, 0.001..=1.0).text("Debug Event Strength"));
+
+            if ui.button("Add Debug Event").clicked() {
+              self.bp_sim.add_event(
+                BPSimEvent::new(Duration::from_millis(self.debug_event_millis), BPActionType::Vibrate { strength: self.debug_event_strength, motor: -1 as i8 })
+              )
+            }
 
             // ui.label(format!("Hello '{}', age {}", self.name, self.age));
             ui.label(format!("Ticks passed: {}", self.update_ticks));
@@ -435,7 +460,7 @@ impl eframe::App for MyApp {
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([315.0, 480.0]),
         ..Default::default()
     };
 
