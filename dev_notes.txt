@@ -1,0 +1,22 @@
+Notes about various things in the project, no particular order or accuracy guranteed:
+
+Bluetooth/Intiface:
+    - Max command input rate apparely once every between 100-150ms.
+      Need to rate limit simulation to roughly 6-10 device signals/second
+
+Async stuff:
+    - Program currently singlethreaded. Performance unknown, but connections appear to take around 500ms 
+      and each message appears to go through effectively instantly. Simulation is triggered via ticks but
+      designed to be able to run on its own thread via only using Durations
+    - Reengineering in the event of low performance should be to separate device communication onto an independent polled thread
+
+File IO
+    - Dragging the exe into a folder with the right filenames appears to be enough for the IO system to work.
+      The user must keep the exe inside the right folder, maybe throw error and hint if they somehow move it to the wrong
+      place?
+    - Use std::fs::Metadata::modified -> Result<SystemTime> to check if the file has been changed before rechecking
+
+IO delays
+    - The local windows filesystem is completely synchronous - there is no advantage to async for local file access 
+      (and it only makes things more complicated)
+    - The BAR lua system is capable of writing once per frame at 30 fps.
