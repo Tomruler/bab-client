@@ -3,12 +3,15 @@
 use std::fs::File;
 use std::path::Path;
 use std::io::prelude::*;
+use eframe::egui::debug_text::print;
 use rev_lines::RevLines;
 
 use eframe::egui;
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, time};
 
 use std::time::{Duration, Instant, SystemTime};
+
+use std::cmp;
 
 use buttplug::{
     client::{device::ScalarValueCommand, ButtplugClient, ButtplugClientError},
@@ -18,24 +21,24 @@ use buttplug::{
     },
   };
 // use buttplug::core::connector::ButtplugConnectorError;
-
+#[derive(Debug)]
 enum BPActionType
 {
   Stop,
-  Vibrate{strength: f64, motor: u8},
-  Power{strength: f64, motor: u8},
+  Vibrate{strength: f64, motor: i8},
+  Power{strength: f64, motor: i8},
   Stroke,
 }
-
+#[derive(Debug)]
 enum BPEffectorType
 {
-  Vibrates,
-  Strokes,
+  Vibrates{intensity: f64, floor: f64},
+  Strokes{amplitude: f64},
 }
-
+#[derive(Debug)]
 struct BPSimEvent
 {
-  finished: bool,
+  pub finished: bool,
   time_remaining: Duration,
   action: BPActionType,
 }
@@ -50,14 +53,26 @@ impl BPSimEvent
   {
     BPSimEvent{finished:true, time_remaining:Duration::ZERO, action:BPActionType::Stop}
   }
+  pub fn pass_time(&mut self, time_passed:Duration)
+  {
+    if(self.finished)
+    {
+      return
+    }
+    self.time_remaining = match self.time_remaining.checked_sub(time_passed)
+    {
+      None => {self.finished = true; Duration::ZERO},
+      Some(time_left) => time_left
+    }
+  }
 }
-
+#[derive(Debug)]
 struct BPEffector
 {
   effector_type: BPEffectorType,
   index: i8,
 }
-
+#[derive(Debug)]
 struct BPSimulator
 {
   events: Vec<BPSimEvent>,
@@ -84,12 +99,97 @@ impl Default for BPSimulator
 
 impl BPSimulator
 {
-  pub fn add_event()
+  pub fn add_event(&mut self, event: BPSimEvent)
   {
+    println!("Event added: {event:?}");
+    self.events.push(event);
+    //process the effects of adding this event
+    //add initial value to effector
+    //
+  }
+  pub fn add_effector(&mut self, effector: BPEffector)
+  {
+    println!("Effector added: {effector:?}");
+    self.effectors.push(effector);
+  }
+  pub fn process_tick(&mut self, current_instant: Instant)
+  {
+    let time_passed = match current_instant.checked_duration_since(self.last_sim_instant)
+    {
+      None => {println!("Error: went back in time");
+                                          return},
+      Some(dur) => dur,
+    };
+    if time_passed > Duration::from_millis(1000/30)
+    {
+      println!("Unusually long tick: {time_passed:?}");
+    }
+    self.last_sim_instant = current_instant;
+    //Run through and update effector states
+    self.update_effectors(time_passed);
+    //Update time remaining on events
+    self.progress_event_times(time_passed);
+    //Cull dead events
+    self.cull_old_events();
+  }
+  fn progress_event_times(&mut self, time_passed:Duration)
+  {
+    for event in self.events.iter_mut()
+    {
+      event.pass_time(time_passed);
+    }
+  }
+  fn update_effectors(&mut self, time_passed: Duration)
+  {
+    //TODO: Implement
+    for effector in self.effectors.iter_mut()
+    {
+      //TODO: Do something
+      match effector.effector_type
+      {
+        BPEffectorType::Vibrates{ref mut intensity, floor} => {
+          //Half life decay
+          *intensity = BPSimulator::calc_intensity_decay(time_passed, *intensity, self.formula_linear_reduction_vib, self.formula_half_life_vib);
+          //Must be at minimum equal to currently active events
+          *intensity = f64::max(*intensity, floor);
+        },
+        BPEffectorType::Strokes{amplitude} => {
+          //Not implemented yet
+        },
+      }
+    }
+  }
+  fn cull_old_events(&mut self)
+  {
+    //perform last actions of finished events TODO
+    //remove finished events
+    self.events.retain(|ev:&BPSimEvent| !ev.finished);
+  }
+  //Models the decrease in vibrator intensity based on the half life formula, with a minor linear offset
+  // I_n = I_c * (1/2)^(deltaT/half_life) - offset
+  pub fn calc_intensity_decay(time_passed: Duration, current_intensity: f64, linear_reduction: f64, half_life: Duration) -> f64
+  {
+    println!("Calculating Decay with params:\ntime_passed: {}, current_intensity: {}, linear_reduction: {}, half_life: {}", time_passed.as_secs_f64(), current_intensity, linear_reduction, half_life.as_secs_f64());
+    let mut new_intensity: f64 = current_intensity;
+    let half_life_decay = f64::powf(0.5 as f64, (time_passed.as_secs_f64() / half_life.as_secs_f64()));
+    println!("Half life decay factor: {}", half_life_decay);
+    new_intensity = f64::max(new_intensity * half_life_decay - linear_reduction, 0 as f64);
+    println!("Final intensity: {} from initial intensity of {}", new_intensity, current_intensity);
+    return new_intensity;
+  }
 
+  fn vibration_intensity_floor(self, effector_index: i8) -> f64
+  {
+    //TODO
+    return 0 as f64;
+  }
+
+  fn calc_vibration_intensity_floor(effector_index: i8, events: Vec<BPSimEvent>) -> f64
+  {
+    //TODO
+    return 0 as f64;
   }
 }
-
 
 
 pub struct BPIntifaceClient
