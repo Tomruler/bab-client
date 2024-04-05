@@ -3,6 +3,7 @@
 use eframe::egui::debug_text::print;
 use eframe::egui::IconData;
 use rev_lines::RevLines;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::hash::Hash;
 use std::io;
@@ -357,12 +358,20 @@ impl BPSimulator {
         println!("Done adding effectors! Total of {} added", vib_index);
 
     }
+    
+    pub fn add_event_queue(&mut self, mut event_queue: VecDeque<BPSimEvent>)
+    {
+        while !event_queue.is_empty()
+        {
+            self.add_event(event_queue.pop_front().unwrap());
+        }
+    }
 }
 #[derive(Debug)]
 pub struct BPCommand
 {
     game_frame : u64,
-    commmand_name : String,
+    event_name : String,
     command_args : HashMap<String, f64>,
 }
 
@@ -404,14 +413,14 @@ impl BPCommand
             }
         };
 
-        let command_name = match cmd_iter.next()
+        let event_name:String = match cmd_iter.next()
         {
             None => {
                 println!("ERROR: Found nothing when trying to find command name.");
                 return None;
             },
-            Some(cmd_name) => {
-                cmd_name;
+            Some(ev_name) => {
+                ev_name.to_string()
             }
         };
         let mut cmd_args: HashMap<String, f64> = HashMap::new();
@@ -452,14 +461,14 @@ impl BPCommand
         Some(BPCommand
         {
             game_frame: frame,
-            commmand_name : command_string,
+            event_name: event_name,
             command_args : cmd_args,
         })
     }
 
     pub fn to_event(&self) -> Option<BPSimEvent>
     {
-        match self.commmand_name.as_str()
+        match self.event_name.as_str()
         {
             "RESET" => {
                 println!("Recieved RESET command, clearing event queue and halting all effectors");
@@ -527,7 +536,7 @@ impl BPCommand
                 return Some(BPSimEvent::new(EVENT_POWER_DURATION, BPActionType::Vibrate { strength: strength, motor: motor_index }));
             },
             _ =>{
-                println!("Unrecognized command: {}", self.commmand_name);
+                println!("Unrecognized command: {}", self.event_name);
                 return None;
             },
         }
@@ -536,6 +545,8 @@ impl BPCommand
 
 pub struct BPDataParser {
     file_path : PathBuf,
+    prev_reached_frame : u64,
+    first_read: bool
 }
 
 impl BPDataParser
@@ -547,7 +558,89 @@ impl BPDataParser
         return BPDataParser
         {
             file_path: path,
+            prev_reached_frame: 0,
+            first_read: true,
         }
+    }
+
+    pub fn get_new_events(&mut self) -> VecDeque<BPSimEvent>
+    {
+        let mut event_queue:VecDeque<BPSimEvent> = VecDeque::new();
+        let mut current_end_frame:u64 = u64::MIN;
+        //TODO
+        // println!("Opening file {}", self.file_path.to_string_lossy());
+        let mut new_file = match File::open(self.file_path.as_path())
+        {
+            Ok(file) => file,
+            Err(e) => {
+                match e.kind()
+                {
+                    io::ErrorKind::NotFound =>
+                    {
+                        println!("ERROR: File {} not found", self.file_path.to_string_lossy());
+                    },
+                    io::ErrorKind::PermissionDenied =>
+                    {
+                        println!("ERROR: No permission to access {}", self.file_path.to_string_lossy());
+                    },
+                    _ => 
+                    {
+                        println!("ERROR: Some other unknown error: {}", e);
+                    }
+                }
+                return event_queue;
+            }
+        };
+        let rev_lines = RevLines::new(new_file);
+        for line_res in rev_lines {
+            let line:String = match line_res {
+                Err(ref why) => {
+                    println!("Error when reading {}: {}", self.file_path.to_string_lossy(), why);
+                    return event_queue;
+                },
+                Ok(line_str) => {
+                    println!("{}", line_str);
+                    line_str
+                },
+            };
+            let command = BPCommand::new(line);
+            match command {
+                None => {
+                    println!("Could not parse command");
+                },
+                Some(cmd) => {
+                    current_end_frame = u64::max(current_end_frame, cmd.game_frame);
+                    if  cmd.game_frame <= self.prev_reached_frame
+                    {
+                        //Edge case: if there is an event on the initial frame (0), don't skip it.
+                        if self.first_read && self.prev_reached_frame == cmd.game_frame
+                        {
+                            println!("Reached front of first read");
+                        }
+                        else {
+                            println!("Reached end of new events.");
+                            break;
+                        }
+                    }
+                    match cmd.to_event()
+                    {
+                        None => {
+                            println!("Could not convert {cmd:?} into command");
+                        }
+                        Some(bpevent) => {
+                            event_queue.push_front(bpevent);
+                        }
+                    }
+                }
+            }
+        }
+        self.prev_reached_frame = current_end_frame;
+        self.first_read = false;
+        if event_queue.len() != 0
+        {
+            println!("Total new events: {}", event_queue.len())
+        }
+        return event_queue;
     }
 
     pub fn debug_print_file(&mut self)
@@ -732,6 +825,7 @@ impl eframe::App for MyApp {
         {
           None => {},
           Some(client) => {
+            self.bp_sim.add_event_queue(self.bp_parser.get_new_events());
             self.bp_sim.process_tick(std::time::Instant::now());
             if(Instant::now() - self.device_last_order_instant >= self.device_order_period)
             {
