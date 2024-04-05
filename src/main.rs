@@ -76,6 +76,19 @@ struct BPEffector {
     effector_type: BPEffectorType,
     index: i8,
 }
+
+impl BPEffector
+{
+  pub fn new(effector_type:BPEffectorType, index:i8) -> BPEffector
+  {
+    BPEffector
+    {
+      effector_type,
+      index
+    }
+  }
+}
+
 #[derive(Debug)]
 struct BPSimulator {
     events: Vec<BPSimEvent>,
@@ -278,6 +291,30 @@ impl BPSimulator {
             }
         }
     }
+
+    pub fn get_vibrator_intensities(&self) -> Vec<f64>
+    {
+      let mut intensities: Vec<f64> = Vec::new();
+      for effector in self.effectors.as_slice()
+      {
+        match effector.effector_type
+        {
+          BPEffectorType::Vibrates { intensity } => 
+          {
+            if(effector.index as usize > intensities.len()+1){
+              println!("Effectors out of order");
+              continue;
+            }
+            intensities.insert(effector.index as usize, intensity);
+          },
+          BPEffectorType::Strokes { amplitude } => {
+            println!("Strokers not yet implemented");
+          }
+        }
+      }
+      println!("Intensities: {intensities:?}");
+      return intensities;
+    }
     //Clear all events, set all intensities to 0
     pub fn force_stop(&mut self) {
         println!("Force stopping");
@@ -287,6 +324,13 @@ impl BPSimulator {
             *intensity = 0 as f64;
         }
         //TODO: Force stop for other components
+    }
+
+    pub fn reset_for_new_device(&mut self)
+    {
+      self.force_stop();
+      self.effectors.clear();
+      self.formula_floor_cache.clear();
     }
 }
 
@@ -335,13 +379,14 @@ impl BPIntifaceClient {
             .block_on(stop_buttplug(&self.client.as_mut().unwrap()));
     }
 
-    pub fn device_vibration_strengths(&mut self, strengths:Vec<f64>)
+    pub fn set_device_vibration_strengths(&mut self, strengths:Vec<f64>)
     {
       self.rt
             .as_mut()
             .unwrap()
             .block_on(device_set_vibration_strengths(&self.client.as_mut().unwrap(), strengths));
     }
+
 }
 
 struct MyApp {
@@ -350,6 +395,8 @@ struct MyApp {
     bp_client: Option<BPIntifaceClient>,
     bp_sim: BPSimulator,
     update_ticks: u32,
+    device_order_period: Duration,
+    device_last_order_instant: Instant,
     file_text: Option<String>,
     debug_event_millis: u64,
     debug_event_strength: f64,
@@ -363,6 +410,8 @@ impl Default for MyApp {
             bp_client: None,
             bp_sim: Default::default(),
             update_ticks: 0,
+            device_order_period: Duration::from_millis(100),
+            device_last_order_instant: Instant::now(),
             file_text: None,
             debug_event_millis: 500,
             debug_event_strength: 0.5,
@@ -381,7 +430,18 @@ impl Default for MyApp {
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.update_ticks += 1;
-        self.bp_sim.process_tick(std::time::Instant::now());
+        match self.bp_client.as_mut()
+        {
+          None => {},
+          Some(client) => {
+            self.bp_sim.process_tick(std::time::Instant::now());
+            if(Instant::now() - self.device_last_order_instant >= self.device_order_period)
+            {
+              self.device_last_order_instant = Instant::now();
+              client.set_device_vibration_strengths(self.bp_sim.get_vibrator_intensities());
+            }
+          },
+        };
         ctx.request_repaint_after(std::time::Duration::from_micros(
             (1.0 / 60.0 * 1000000.0) as u64,
         ));
@@ -404,6 +464,9 @@ impl eframe::App for MyApp {
                     rt: None,
                 });
                 self.bp_client.as_mut().unwrap().connect();
+                self.bp_sim.reset_for_new_device();
+                //TODO: Make this line work
+                load_device_effectors_to_sim(&self.bp_sim, self.bp_client.unwrap().client.unwrap());
             }
             if ui.button("Vibrate").clicked() {
                 match self.bp_client.as_mut() {
@@ -444,7 +507,9 @@ impl eframe::App for MyApp {
                 BPSimEvent::new(Duration::from_millis(self.debug_event_millis), BPActionType::Vibrate { strength: self.debug_event_strength, motor: -1 as i8 })
               )
             }
-
+            if ui.button("Add Debug Stop").clicked() {
+              self.bp_sim.add_event(BPSimEvent::new_stop_event());
+            }
             // ui.label(format!("Hello '{}', age {}", self.name, self.age));
             ui.label(format!("Ticks passed: {}", self.update_ticks));
             match &self.file_text {
@@ -519,6 +584,30 @@ fn main() -> Result<(), eframe::Error> {
             // Box::<MyApp>::bound(bp_client)
         }),
     )
+}
+
+fn load_device_effectors_to_sim(mut bp_sim: &BPSimulator, client: &ButtplugClient)
+{
+  println!("Loading devices to sim");
+  // let bp_client= match bpi_client.client.as_mut()
+  // {
+  //   None => {
+  //     println!("There is no client bound!");
+  //     return;
+  //   },
+  //   Some(bpc) => bpc,
+  // };
+  let client_device = client.devices()[0];
+  //Load vibrators
+  let mut vib_index: i8 = 0;
+  let vibrator_count = client_device.vibrate_attributes().len() as i8;
+  while vib_index < vibrator_count
+  {
+    bp_sim.add_effector(BPEffector::new(BPEffectorType::Vibrates { intensity: 0 as f64 }, vib_index));
+    vib_index += 1;
+  }
+  //TODO: Other effectors
+  println!("Done adding effectors! Total of {} added", vib_index);
 }
 
 async fn test_buttplug() -> anyhow::Result<()> {
@@ -623,10 +712,10 @@ async fn connect_buttplug() -> Result<ButtplugClient, ButtplugClientError> {
     println!("Attempting Connection");
     let connector = new_json_ws_client_connector("ws://localhost:12345");
 
-    let client = ButtplugClient::new("Example Client");
+    let client = ButtplugClient::new("Beyond All Buttplug Client");
     client.connect(connector).await?;
 
-    println!("Connected!");
+    println!("Connected to Intiface");
 
     // You usually shouldn't run Start/Stop scanning back-to-back like
     // this, but with TestDevice we know our device will be found when we
