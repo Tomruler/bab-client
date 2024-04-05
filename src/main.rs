@@ -556,43 +556,43 @@ fn main() -> Result<(), eframe::Error> {
         ..Default::default()
     };
 
-    let path = Path::new("filetest.txt");
-    let display = path.display();
+    // let path = Path::new("filetest.txt");
+    // let display = path.display();
 
-    let mut file = match File::open(&path) {
-        Err(why) => panic!("couldn't open {}: {}", display, why),
-        Ok(file) => file,
-    };
+    // let mut file = match File::open(&path) {
+    //     Err(why) => panic!("couldn't open {}: {}", display, why),
+    //     Ok(file) => file,
+    // };
 
-    let mut s = String::new();
-    match file.read_to_string(&mut s) {
-        Err(why) => panic!("couldn't read {}: {}", display, why),
-        Ok(_) => print!("{} contains:\n{}", display, s),
-    }
-    println!("\n");
-    let rev_lines = RevLines::new(file);
-    for line in rev_lines {
-        match line {
-            Err(ref why) => println!("Error when reading {}: {}", display, why),
-            Ok(ref line_str) => println!("{}", line_str),
-        }
-        println!("{:?}", line);
-    }
+    // let mut s = String::new();
+    // match file.read_to_string(&mut s) {
+    //     Err(why) => panic!("couldn't read {}: {}", display, why),
+    //     Ok(_) => print!("{} contains:\n{}", display, s),
+    // }
+    // println!("\n");
+    // let rev_lines = RevLines::new(file);
+    // for line in rev_lines {
+    //     match line {
+    //         Err(ref why) => println!("Error when reading {}: {}", display, why),
+    //         Ok(ref line_str) => println!("{}", line_str),
+    //     }
+    //     println!("{:?}", line);
+    // }
 
-    let path2 = Path::new("resources/filetest2.txt");
-    let display2 = path2.display();
+    // let path2 = Path::new("resources/filetest2.txt");
+    // let display2 = path2.display();
 
-    let mut file2 = match File::open(&path2) {
-        Err(why) => panic!("couldn't open {}: {}", display2, why),
-        Ok(file2) => file2,
-    };
+    // let mut file2 = match File::open(&path2) {
+    //     Err(why) => panic!("couldn't open {}: {}", display2, why),
+    //     Ok(file2) => file2,
+    // };
 
-    let mut s2 = String::new();
-    match file2.read_to_string(&mut s2) {
-        Err(why) => panic!("couldn't read {}: {}", display2, why),
-        Ok(_) => print!("{} contains:\n{}", display2, s),
-    }
-    println!("\n");
+    // let mut s2 = String::new();
+    // match file2.read_to_string(&mut s2) {
+    //     Err(why) => panic!("couldn't read {}: {}", display2, why),
+    //     Ok(_) => print!("{} contains:\n{}", display2, s),
+    // }
+    // println!("\n");
 
     // First try at executing async code in sync context
     // let rt = tokio::runtime::Builder::new_current_thread().enable_all().build();
