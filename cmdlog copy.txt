@@ -1,0 +1,9 @@
+0 VIBRATE Duration:5 Motor:-1 Strength:0.2
+300 VIBRATE Duration:1 Motor:-1 Strength:0.2
+2980 VIBRATE Duration:0.1 Motor:-1 Strength:0.1
+2990 VIBRATE Duration:0.1 Motor:-1 Strength:0.1
+3000 VIBRATE Duration:1 Motor:-1 Strength:0.2
+3000 VIBRATE Duration:0.1 Motor:-1 Strength:0.1
+3110 VIBRATE Duration:0.1 Motor:-1 Strength:0.1
+3120 VIBRATE Duration:0.1 Motor:-1 Strength:0.1
+3175 RESET

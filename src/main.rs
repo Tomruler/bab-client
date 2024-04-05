@@ -2,6 +2,7 @@
                                                                    //IO
 use eframe::egui::debug_text::print;
 use eframe::egui::IconData;
+use futures::future::UnwrapOrElse;
 use rev_lines::RevLines;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -592,6 +593,7 @@ impl BPDataParser
             }
         };
         let rev_lines = RevLines::new(new_file);
+        let mut events_read = 0;
         for line_res in rev_lines {
             let line:String = match line_res {
                 Err(ref why) => {
@@ -604,6 +606,7 @@ impl BPDataParser
                 },
             };
             let command = BPCommand::new(line);
+            events_read +=1;
             match command {
                 None => {
                     println!("Could not parse command");
@@ -635,7 +638,10 @@ impl BPDataParser
             }
         }
         self.prev_reached_frame = current_end_frame;
-        self.first_read = false;
+        if(events_read >= 1)
+        {
+            self.first_read = false;
+        }
         if event_queue.len() != 0
         {
             println!("Total new events: {}", event_queue.len())
@@ -709,7 +715,75 @@ impl BPDataParser
             // println!("{:?}", line);
         }
     }
+    // pub fn clear_file(&self)
+    // {
+    //     println!("Wiping file: {}", self.file_path.to_string_lossy());
+    //     match std::fs::OpenOptions::new().truncate(true).open(self.file_path.as_path())
+    //     {
+    //         Err(_) =>{
+    //             println!("Error has occured when wiping file");
+    //         },
+    //         Ok(_) =>{
+    //             println!("Successfully wiped {}", self.file_path.to_string_lossy());
+    //         },
+    //     }
+    // }
 
+    pub fn set_prev_event_to_latest(&mut self)
+    {
+        let mut new_file = match File::open(self.file_path.as_path())
+        {
+            Ok(file) => file,
+            Err(e) => {
+                match e.kind()
+                {
+                    io::ErrorKind::NotFound =>
+                    {
+                        println!("ERROR: File {} not found", self.file_path.to_string_lossy());
+                    },
+                    io::ErrorKind::PermissionDenied =>
+                    {
+                        println!("ERROR: No permission to access {}", self.file_path.to_string_lossy());
+                    },
+                    _ => 
+                    {
+                        println!("ERROR: Some other unknown error: {}", e);
+                    }
+                }
+                return;
+            }
+        };
+        let mut rev_lines = RevLines::new(new_file);
+        match rev_lines.next()
+        {
+            None =>{
+                self.prev_reached_frame = 0;
+            },
+            Some(line_res) =>
+            {
+                let line:String = match line_res {
+                    Err(ref why) => {
+                        println!("Error when reading {}: {}", self.file_path.to_string_lossy(), why);
+                        return;
+                    },
+                    Ok(line_str) => {
+                        println!("{}", line_str);
+                        line_str
+                    },
+                };
+                let command = BPCommand::new(line);
+                match command {
+                    None => {
+                        println!("Could not parse command");
+                    },
+                    Some(cmd) => {
+                        self.prev_reached_frame = cmd.game_frame;
+                    }
+                }
+            }
+        }
+        self.first_read = true;
+    }
 }
 pub struct BPIntifaceClient {
     client: Option<ButtplugClient>,
@@ -859,17 +933,18 @@ impl eframe::App for MyApp {
                 self.bp_sim.reset_for_new_device();
                 //TODO: Make this line work
                 self.bp_sim.add_multiple_vib_effectors(self.bp_client.as_mut().unwrap().num_vibrator_motors());
+                self.bp_parser.set_prev_event_to_latest();
             }
-            if ui.button("Vibrate").clicked() {
-                match self.bp_client.as_mut() {
-                    None => println!("Not connected"),
-                    Some(client) => client.vibrate(),
-                }
-                // self.bp_client.as_mut().unwrap().vibrate();
-            }
-            if ui.button("Stop").clicked() {
-                self.bp_client.as_mut().unwrap().stop();
-            }
+            // if ui.button("Vibrate").clicked() {
+            //     match self.bp_client.as_mut() {
+            //         None => println!("Not connected"),
+            //         Some(client) => client.vibrate(),
+            //     }
+            //     // self.bp_client.as_mut().unwrap().vibrate();
+            // }
+            // if ui.button("Stop").clicked() {
+            //     self.bp_client.as_mut().unwrap().stop();
+            // }
             if ui.button("Display File").clicked() {
                 // let path = Path::new("filetest.txt");
                 // let display = path.display();
