@@ -27,6 +27,9 @@ use buttplug::{
         connector::new_json_ws_client_connector, message::ClientGenericDeviceMessageAttributes,
     },
 };
+
+const EVENT_POWER_DURATION:Duration = Duration::from_secs(300);
+
 // use buttplug::core::connector::ButtplugConnectorError;
 #[derive(Debug)]
 enum BPActionType {
@@ -355,6 +358,181 @@ impl BPSimulator {
 
     }
 }
+#[derive(Debug)]
+pub struct BPCommand
+{
+    game_frame : u64,
+    commmand_name : String,
+    command_args : HashMap<String, f64>,
+}
+
+impl BPCommand
+{
+    pub fn new(command_string : String) -> Option<BPCommand>
+    {
+        println!("Converting {} into a command", command_string);
+        
+        if command_string == ""
+        {
+            println!("This string is empty!");
+            return None;
+        }
+        if command_string == "\n"
+        {
+            println!("This string is a single newline!");
+            return None;
+        }
+        let mut cmd_iter = command_string.split(" ");
+        
+        let frame = match cmd_iter.next()
+        {
+            None => {
+                println!("ERROR: Found nothing when trying to find frame number.");
+                return None;
+            },
+            Some(frame_string) => {
+                match frame_string.parse::<u64>()
+                {
+                    Err(_) => {
+                        println!("Error occured when trying to parse {} as an unsigned integer", frame_string);
+                        return None;
+                    },
+                    Ok(frame_num) => {
+                        frame_num
+                    },
+                }
+            }
+        };
+
+        let command_name = match cmd_iter.next()
+        {
+            None => {
+                println!("ERROR: Found nothing when trying to find command name.");
+                return None;
+            },
+            Some(cmd_name) => {
+                cmd_name;
+            }
+        };
+        let mut cmd_args: HashMap<String, f64> = HashMap::new();
+        for arg_str in cmd_iter
+        {
+            let mut arg_iter = arg_str.split(":");
+            let arg_name = match arg_iter.next()
+            {
+                None => {
+                    println!("ERROR: command argument has no name");
+                    continue;
+                },
+                Some(arg_name_string) => {
+                    arg_name_string
+                }
+            };
+            let arg_value = match arg_iter.next()
+            {
+                None => {
+                    println!("ERROR: command argument has no value");
+                    continue;
+                },
+                Some(arg_value_string) => {
+                    match arg_value_string.parse::<f64>()
+                    {
+                        Err(_) => {
+                            println!("Error occured when trying to parse {} as an f64", arg_value_string);
+                            continue;
+                        },
+                        Ok(arg_val) => {
+                            arg_val
+                        },
+                    }
+                }
+            };
+            cmd_args.insert(arg_name.to_string(), arg_value);
+        }
+        Some(BPCommand
+        {
+            game_frame: frame,
+            commmand_name : command_string,
+            command_args : cmd_args,
+        })
+    }
+
+    pub fn to_event(&self) -> Option<BPSimEvent>
+    {
+        match self.commmand_name.as_str()
+        {
+            "RESET" => {
+                println!("Recieved RESET command, clearing event queue and halting all effectors");
+                return Some(BPSimEvent::new_stop_event());
+            }
+            "VIBRATE" => {
+                let duration: Duration = match self.command_args.get("Duration")
+                {
+                    None =>{
+                        println!("Cannot create VIBRATE command as it lacks a duration");
+                        return None;
+                    }
+                    Some(seconds) => {
+                        if(*seconds < 0 as f64)
+                        {
+                            println!("Cannot create an event with negative lifespan");
+                            return None;
+                        }
+                        Duration::from_secs_f64(*seconds)
+                    }
+                };
+                let strength: f64 = match self.command_args.get("Strength")
+                {
+                    None => {
+                        println!("Cannot create VIBRATE command as it lacks a strength");
+                        return None;
+                    }
+                    Some(strength_val) =>{
+                        *strength_val
+                    }
+                };
+                let motor_index: i8 = match self.command_args.get("Motor")
+                {
+                    None => {
+                        println!("Cannot create VIBRATE command as it lacks a motor index");
+                        return None;
+                    }
+                    Some(m_index) =>{
+                        *m_index as i8
+                    }
+                };
+                return Some(BPSimEvent::new(duration, BPActionType::Vibrate { strength: strength, motor: motor_index }));
+            },
+            "POWER" =>{
+                let strength: f64 = match self.command_args.get("Strength")
+                {
+                    None => {
+                        println!("Cannot create POWER command as it lacks a strength");
+                        return None;
+                    }
+                    Some(strength_val) =>{
+                        *strength_val
+                    }
+                };
+                let motor_index: i8 = match self.command_args.get("Motor")
+                {
+                    None => {
+                        println!("Cannot create POWER command as it lacks a motor index");
+                        return None;
+                    }
+                    Some(m_index) =>{
+                        *m_index as i8
+                    }
+                };
+                return Some(BPSimEvent::new(EVENT_POWER_DURATION, BPActionType::Vibrate { strength: strength, motor: motor_index }));
+            },
+            _ =>{
+                println!("Unrecognized command: {}", self.commmand_name);
+                return None;
+            },
+        }
+    }
+}
 
 pub struct BPDataParser {
     file_path : PathBuf,
@@ -435,7 +613,7 @@ impl BPDataParser
                 Err(ref why) => println!("Error when reading {}: {}", self.file_path.to_string_lossy(), why),
                 Ok(ref line_str) => println!("{}", line_str),
             }
-            println!("{:?}", line);
+            // println!("{:?}", line);
         }
     }
 
@@ -516,7 +694,7 @@ struct MyApp {
     update_ticks: u32,
     device_order_period: Duration,
     device_last_order_instant: Instant,
-    file_text: Option<String>,
+    // file_text: Option<String>,
     debug_event_millis: u64,
     debug_event_strength: f64,
 }
@@ -532,7 +710,7 @@ impl Default for MyApp {
             update_ticks: 0,
             device_order_period: Duration::from_millis(100),
             device_last_order_instant: Instant::now(),
-            file_text: None,
+            // file_text: None,
             debug_event_millis: 500,
             debug_event_strength: 0.5,
         }
@@ -636,10 +814,10 @@ impl eframe::App for MyApp {
             }
             // ui.label(format!("Hello '{}', age {}", self.name, self.age));
             ui.label(format!("Ticks passed: {}", self.update_ticks));
-            match &self.file_text {
-                None => ui.label(format!("No file currently loaded.")),
-                Some(text_string) => ui.label(format!("File contains:\n{}", text_string)),
-            };
+            // match &self.file_text {
+            //     None => ui.label(format!("No file currently loaded.")),
+            //     Some(text_string) => ui.label(format!("File contains:\n{}", text_string)),
+            // };
 
             ui.image(egui::include_image!("../resources/neco.png"));
         });
