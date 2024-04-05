@@ -7,6 +7,7 @@ use std::hash::Hash;
 use std::io::prelude::*;
 use std::iter::Map;
 use std::path::Path;
+
 //UI
 use eframe::egui;
 use tokio::{runtime::Runtime, time};
@@ -259,18 +260,18 @@ impl BPSimulator {
         linear_reduction: f64,
         half_life: Duration,
     ) -> f64 {
-        println!("Calculating Decay with params:\ntime_passed: {}, current_intensity: {}, linear_reduction: {}, half_life: {}", time_passed.as_secs_f64(), current_intensity, linear_reduction, half_life.as_secs_f64());
+        // println!("Calculating Decay with params:\ntime_passed: {}, current_intensity: {}, linear_reduction: {}, half_life: {}", time_passed.as_secs_f64(), current_intensity, linear_reduction, half_life.as_secs_f64());
         let mut new_intensity: f64 = current_intensity;
         let half_life_decay = f64::powf(
             0.5 as f64,
             (time_passed.as_secs_f64() / half_life.as_secs_f64()),
         );
-        println!("Half life decay factor: {}", half_life_decay);
+        // println!("Half life decay factor: {}", half_life_decay);
         new_intensity = f64::max(new_intensity * half_life_decay - linear_reduction, 0 as f64);
-        println!(
-            "Final intensity: {} from initial intensity of {}",
-            new_intensity, current_intensity
-        );
+        // println!(
+        //     "Final intensity: {} from initial intensity of {}",
+        //     new_intensity, current_intensity
+        // );
         return new_intensity;
     }
 
@@ -312,7 +313,7 @@ impl BPSimulator {
           }
         }
       }
-      println!("Intensities: {intensities:?}");
+    //   println!("Intensities: {intensities:?}");
       return intensities;
     }
     //Clear all events, set all intensities to 0
@@ -331,6 +332,20 @@ impl BPSimulator {
       self.force_stop();
       self.effectors.clear();
       self.formula_floor_cache.clear();
+    }
+
+    pub fn add_multiple_vib_effectors(&mut self, num_motors: usize)
+    {
+        println!("Adding {} vibrational effectors", num_motors);
+        let mut vib_index: usize = 0;
+        while vib_index < num_motors
+        {
+            self.add_effector(BPEffector::new(BPEffectorType::Vibrates { intensity: 0 as f64 }, vib_index as i8));
+            vib_index += 1;
+        }
+        //TODO: Other effectors
+        println!("Done adding effectors! Total of {} added", vib_index);
+
     }
 }
 
@@ -386,7 +401,19 @@ impl BPIntifaceClient {
             .unwrap()
             .block_on(device_set_vibration_strengths(&self.client.as_mut().unwrap(), strengths));
     }
-
+    pub fn num_vibrator_motors(&mut self) -> usize
+    {
+        match &self.client
+        {
+            None => {
+                println!("Client not connected!");
+                0 as usize
+            }
+            Some(bp_client) => {
+                bp_client.devices()[0].vibrate_attributes().len()
+            }
+        }
+    }
 }
 
 struct MyApp {
@@ -466,7 +493,7 @@ impl eframe::App for MyApp {
                 self.bp_client.as_mut().unwrap().connect();
                 self.bp_sim.reset_for_new_device();
                 //TODO: Make this line work
-                load_device_effectors_to_sim(&self.bp_sim, self.bp_client.unwrap().client.unwrap());
+                self.bp_sim.add_multiple_vib_effectors(self.bp_client.as_mut().unwrap().num_vibrator_motors());
             }
             if ui.button("Vibrate").clicked() {
                 match self.bp_client.as_mut() {
@@ -586,29 +613,29 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
-fn load_device_effectors_to_sim(mut bp_sim: &BPSimulator, client: &ButtplugClient)
-{
-  println!("Loading devices to sim");
-  // let bp_client= match bpi_client.client.as_mut()
-  // {
-  //   None => {
-  //     println!("There is no client bound!");
-  //     return;
-  //   },
-  //   Some(bpc) => bpc,
-  // };
-  let client_device = client.devices()[0];
-  //Load vibrators
-  let mut vib_index: i8 = 0;
-  let vibrator_count = client_device.vibrate_attributes().len() as i8;
-  while vib_index < vibrator_count
-  {
-    bp_sim.add_effector(BPEffector::new(BPEffectorType::Vibrates { intensity: 0 as f64 }, vib_index));
-    vib_index += 1;
-  }
-  //TODO: Other effectors
-  println!("Done adding effectors! Total of {} added", vib_index);
-}
+// fn load_device_effectors_to_sim(mut bp_sim: &BPSimulator, client: &ButtplugClient)
+// {
+//   println!("Loading devices to sim");
+//   // let bp_client= match bpi_client.client.as_mut()
+//   // {
+//   //   None => {
+//   //     println!("There is no client bound!");
+//   //     return;
+//   //   },
+//   //   Some(bpc) => bpc,
+//   // };
+//   let client_device = client.devices()[0];
+//   //Load vibrators
+//   let mut vib_index: i8 = 0;
+//   let vibrator_count = client_device.vibrate_attributes().len() as i8;
+//   while vib_index < vibrator_count
+//   {
+//     bp_sim.add_effector(BPEffector::new(BPEffectorType::Vibrates { intensity: 0 as f64 }, vib_index));
+//     vib_index += 1;
+//   }
+//   //TODO: Other effectors
+//   println!("Done adding effectors! Total of {} added", vib_index);
+// }
 
 async fn test_buttplug() -> anyhow::Result<()> {
     println!("Entered main");
@@ -823,14 +850,14 @@ async fn stop_buttplug(client: &ButtplugClient) -> Result<bool, ButtplugClientEr
 
 async fn device_set_vibration_strengths(client: &ButtplugClient, mut strengths: Vec<f64>) -> Result<(), ButtplugClientError>
 {
-  println!("Setting vibrators to: {strengths:?}");
+//   println!("Setting vibrators to: {strengths:?}");
   let client_device = &client.devices()[0];
   let vibrator_count = client_device.vibrate_attributes().len();
-  println!(
-      "{} has {} vibrators.",
-      client_device.name(),
-      vibrator_count,
-  );
+//   println!(
+//       "{} has {} vibrators.",
+//       client_device.name(),
+//       vibrator_count,
+//   );
   if strengths.len()!=vibrator_count
   {
     println!("Note: Number of vibrator settings different from device.\n
