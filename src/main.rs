@@ -1,12 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
                                                                    //IO
 use eframe::egui::debug_text::print;
+use eframe::egui::IconData;
 use rev_lines::RevLines;
 use std::fs::File;
 use std::hash::Hash;
+use std::io;
 use std::io::prelude::*;
 use std::iter::Map;
 use std::path::Path;
+use std::path::PathBuf;
 
 //UI
 use eframe::egui;
@@ -201,6 +204,10 @@ impl BPSimulator {
                         *intensity,
                         *(self.formula_floor_cache.get(&effector.index).unwrap()),
                     );
+                    if *intensity < self.formula_threshold
+                    {
+                        *intensity = 0 as f64;
+                    }
                 }
                 BPEffectorType::Strokes { amplitude } => {
                     //Not implemented yet
@@ -302,7 +309,7 @@ impl BPSimulator {
         {
           BPEffectorType::Vibrates { intensity } => 
           {
-            if(effector.index as usize > intensities.len()+1){
+            if effector.index as usize > intensities.len()+1 {
               println!("Effectors out of order");
               continue;
             }
@@ -349,6 +356,90 @@ impl BPSimulator {
     }
 }
 
+pub struct BPDataParser {
+    file_path : PathBuf,
+}
+
+impl BPDataParser
+{
+    pub fn new(file_address: String) -> BPDataParser
+    {
+        let path = Path::new(&file_address).to_path_buf();
+        
+        return BPDataParser
+        {
+            file_path: path,
+        }
+    }
+
+    pub fn debug_print_file(&mut self)
+    {
+        println!("Opening file {}", self.file_path.to_string_lossy());
+        let mut new_file = match File::open(self.file_path.as_path())
+        {
+            Ok(file) => file,
+            Err(e) => {
+                match e.kind()
+                {
+                    io::ErrorKind::NotFound =>
+                    {
+                        println!("ERROR: File {} not found", self.file_path.to_string_lossy());
+                    },
+                    io::ErrorKind::PermissionDenied =>
+                    {
+                        println!("ERROR: No permission to access {}", self.file_path.to_string_lossy());
+                    },
+                    _ => 
+                    {
+                        println!("ERROR: Some other unknown error: {}", e);
+                    }
+                }
+                return;
+            }
+        };
+        let mut s = String::new();
+        match new_file.read_to_string(&mut s) {
+            Err(why) => println!("couldn't read {}: {}", self.file_path.to_string_lossy(), why),
+            Ok(_) => print!("{} contains:\n{}", self.file_path.to_string_lossy(), s),
+        }
+    }
+
+    pub fn debug_print_file_rev(&mut self)
+    {
+        println!("Opening file {}", self.file_path.to_string_lossy());
+        let mut new_file = match File::open(self.file_path.as_path())
+        {
+            Ok(file) => file,
+            Err(e) => {
+                match e.kind()
+                {
+                    io::ErrorKind::NotFound =>
+                    {
+                        println!("ERROR: File {} not found", self.file_path.to_string_lossy());
+                    },
+                    io::ErrorKind::PermissionDenied =>
+                    {
+                        println!("ERROR: No permission to access {}", self.file_path.to_string_lossy());
+                    },
+                    _ => 
+                    {
+                        println!("ERROR: Some other unknown error: {}", e);
+                    }
+                }
+                return;
+            }
+        };
+        let rev_lines = RevLines::new(new_file);
+        for line in rev_lines {
+            match line {
+                Err(ref why) => println!("Error when reading {}: {}", self.file_path.to_string_lossy(), why),
+                Ok(ref line_str) => println!("{}", line_str),
+            }
+            println!("{:?}", line);
+        }
+    }
+
+}
 pub struct BPIntifaceClient {
     client: Option<ButtplugClient>,
     rt: Option<Runtime>,
@@ -421,6 +512,7 @@ struct MyApp {
     age: u32,
     bp_client: Option<BPIntifaceClient>,
     bp_sim: BPSimulator,
+    bp_parser: BPDataParser,
     update_ticks: u32,
     device_order_period: Duration,
     device_last_order_instant: Instant,
@@ -436,6 +528,7 @@ impl Default for MyApp {
             age: 42,
             bp_client: None,
             bp_sim: Default::default(),
+            bp_parser: BPDataParser::new("cmdlog.txt".to_string()),
             update_ticks: 0,
             device_order_period: Duration::from_millis(100),
             device_last_order_instant: Instant::now(),
@@ -506,24 +599,28 @@ impl eframe::App for MyApp {
                 self.bp_client.as_mut().unwrap().stop();
             }
             if ui.button("Display File").clicked() {
-                let path = Path::new("filetest.txt");
-                let display = path.display();
+                // let path = Path::new("filetest.txt");
+                // let display = path.display();
 
-                let mut file = match File::open(&path) {
-                    Err(why) => panic!("couldn't open {}: {}", display, why),
-                    Ok(file) => file,
-                };
+                // let mut file = match File::open(&path) {
+                //     Err(why) => panic!("couldn't open {}: {}", display, why),
+                //     Ok(file) => file,
+                // };
 
-                self.file_text = Some(String::new());
-                match file.read_to_string(&mut self.file_text.as_mut().unwrap()) {
-                    Err(why) => panic!("couldn't read {}: {}", display, why),
-                    Ok(_) => print!(
-                        "{} contains:\n{}",
-                        display,
-                        self.file_text.as_mut().unwrap()
-                    ),
-                };
-                println!("\n");
+                // self.file_text = Some(String::new());
+                // match file.read_to_string(&mut self.file_text.as_mut().unwrap()) {
+                //     Err(why) => panic!("couldn't read {}: {}", display, why),
+                //     Ok(_) => print!(
+                //         "{} contains:\n{}",
+                //         display,
+                //         self.file_text.as_mut().unwrap()
+                //     ),
+                // };
+                // println!("\n");
+                self.bp_parser.debug_print_file();
+            }
+            if ui.button("Display File Backwards").clicked() {
+                self.bp_parser.debug_print_file_rev();
             }
             //Debug panel
             ui.add(egui::Slider::new(&mut self.debug_event_millis, 100..=5000).text("Debug Event Duration (millis)"));
@@ -553,9 +650,14 @@ fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([315.0, 480.0]),
+        // icon_data: Some(eframe::epi::IconData {
+        //     rgba: icon.into_raw(),
+        //     width: icon_width,
+        //     height: icon_height,
+        // }),
         ..Default::default()
     };
-
+    
     // let path = Path::new("filetest.txt");
     // let display = path.display();
 
