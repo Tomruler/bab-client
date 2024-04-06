@@ -79,6 +79,10 @@ impl BPSimEvent {
             Some(time_left) => time_left,
         }
     }
+    pub fn force_finish(&mut self)
+    {
+        self.finished = true;
+    }
 }
 #[derive(Debug)]
 struct BPEffector {
@@ -139,6 +143,7 @@ impl BPSimulator {
             BPActionType::Power { strength, motor } => {
                 println!("Adding vibration power event");
                 //TODO: End all other power events
+                self.finish_power_events();
                 self.update_intensity_floor(motor, strength);
             }
             BPActionType::Stop => {
@@ -238,12 +243,10 @@ impl BPSimulator {
             match self.events.get(index).unwrap().action {
                 BPActionType::Vibrate { strength, motor } => {
                     println!("Removing vibration event");
-                    //TODO
                     self.update_intensity_floor(motor, -strength);
                 }
                 BPActionType::Power { strength, motor } => {
                     println!("Removing vibration power event");
-                    //TODO
                     self.update_intensity_floor(motor, -strength);
                 }
                 BPActionType::Stop => {
@@ -328,6 +331,32 @@ impl BPSimulator {
     //   println!("Intensities: {intensities:?}");
       return intensities;
     }
+
+    pub fn finish_power_events(&mut self){
+        let mut index = 0;
+        //perform last actions of finished events
+        while index < self.events.len() {
+            match self.events.get_mut(index) {
+                None => {
+                    println!("Error: index out of bounds during culling.")
+                }
+                Some(ev) => {
+                    index +=1;
+                    if ev.finished {
+                        continue;
+                    }
+                    match ev.action{
+                        BPActionType::Power{..} => {
+                        },
+                        _ => continue,
+                    }
+                    ev.force_finish();
+                }
+            }
+          index +=1;
+        }
+    }
+
     //Clear all events, set all intensities to 0
     pub fn force_stop(&mut self) {
         println!("Force stopping");
@@ -923,7 +952,9 @@ impl eframe::App for MyApp {
             //     self.age += 1;
             //     // self.bp_client.as_mut().unwrap().vibrate();
             // }
-            
+            if ui.button("Add Debug Stop").clicked() {
+                self.bp_sim.add_event(BPSimEvent::new_stop_event());
+              }
             if ui.button("Connect").clicked() {
                 self.bp_client = Some(BPIntifaceClient {
                     client: None,
@@ -978,9 +1009,7 @@ impl eframe::App for MyApp {
                 BPSimEvent::new(Duration::from_millis(self.debug_event_millis), BPActionType::Vibrate { strength: self.debug_event_strength, motor: -1 as i8 })
               )
             }
-            if ui.button("Add Debug Stop").clicked() {
-              self.bp_sim.add_event(BPSimEvent::new_stop_event());
-            }
+            
             // ui.label(format!("Hello '{}', age {}", self.name, self.age));
             ui.label(format!("Ticks passed: {}", self.update_ticks));
             // match &self.file_text {
