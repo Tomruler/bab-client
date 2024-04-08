@@ -647,6 +647,11 @@ impl BPDataParser
                     current_end_frame = u64::max(current_end_frame, cmd.game_frame);
                     if  cmd.game_frame <= self.prev_reached_frame
                     {
+                        //Edge case: most recent command is earlier than the furthest reached -> new game has happened
+                        if events_read == 1 && cmd.game_frame < self.prev_reached_frame
+                        {
+                            self.reset_state_for_new_game(cmd.game_frame);
+                        }
                         //Edge case: if there is an event on the initial frame (0), don't skip it.
                         if self.first_read && self.prev_reached_frame == cmd.game_frame
                         {
@@ -670,7 +675,7 @@ impl BPDataParser
             }
         }
         self.prev_reached_frame = current_end_frame;
-        if(events_read >= 1)
+        if events_read >= 1
         {
             self.first_read = false;
         }
@@ -716,7 +721,7 @@ impl BPDataParser
     pub fn debug_print_file_rev(&mut self)
     {
         println!("Opening file {}", self.file_path.to_string_lossy());
-        let mut new_file = match File::open(self.file_path.as_path())
+        let new_file = match File::open(self.file_path.as_path())
         {
             Ok(file) => file,
             Err(e) => {
@@ -763,7 +768,7 @@ impl BPDataParser
 
     pub fn set_prev_event_to_latest(&mut self)
     {
-        let mut new_file = match File::open(self.file_path.as_path())
+        let new_file = match File::open(self.file_path.as_path())
         {
             Ok(file) => file,
             Err(e) => {
@@ -786,10 +791,11 @@ impl BPDataParser
             }
         };
         let mut rev_lines = RevLines::new(new_file);
+        let mut latest_frame = self.prev_reached_frame;
         match rev_lines.next()
         {
             None =>{
-                self.prev_reached_frame = 0;
+                latest_frame = 0;
             },
             Some(line_res) =>
             {
@@ -809,12 +815,22 @@ impl BPDataParser
                         println!("Could not parse command");
                     },
                     Some(cmd) => {
-                        self.prev_reached_frame = cmd.game_frame;
+                        latest_frame = cmd.game_frame;
                     }
                 }
             }
         }
+        self.reset_state_for_new_game(latest_frame);
+    }
+
+    fn reset_state_for_new_game(&mut self, new_first_frame: u64)
+    {   
+        if self.prev_reached_frame > new_first_frame {
+            println!("Warning: New first frame is later than the previous last frame.");
+        }
+        self.prev_reached_frame = new_first_frame;
         self.first_read = true;
+        return
     }
 }
 pub struct BPIntifaceClient {
