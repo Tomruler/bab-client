@@ -912,6 +912,7 @@ struct MyApp {
     // file_text: Option<String>,
     debug_event_millis: u64,
     debug_event_strength: f64,
+    debug_stats_vibrator_motor_states: Vec<f64>,
 }
 
 impl Default for MyApp {
@@ -928,6 +929,7 @@ impl Default for MyApp {
             // file_text: None,
             debug_event_millis: 500,
             debug_event_strength: 0.5,
+            debug_stats_vibrator_motor_states: [0 as f64].to_vec(),
         }
     }
 
@@ -953,6 +955,7 @@ impl eframe::App for MyApp {
             {
               self.device_last_order_instant = Instant::now();
               client.set_device_vibration_strengths(self.bp_sim.get_vibrator_intensities());
+              self.debug_stats_vibrator_motor_states = self.bp_sim.get_vibrator_intensities();
             }
           },
         };
@@ -981,44 +984,16 @@ impl eframe::App for MyApp {
                 });
                 self.bp_client.as_mut().unwrap().connect();
                 self.bp_sim.reset_for_new_device();
-                //TODO: Make this line work
                 self.bp_sim.add_multiple_vib_effectors(self.bp_client.as_mut().unwrap().num_vibrator_motors());
                 self.bp_parser.set_prev_event_to_latest();
             }
-            // if ui.button("Vibrate").clicked() {
-            //     match self.bp_client.as_mut() {
-            //         None => println!("Not connected"),
-            //         Some(client) => client.vibrate(),
-            //     }
-            //     // self.bp_client.as_mut().unwrap().vibrate();
+            // if ui.button("Display File").clicked() {
+                
+            //     self.bp_parser.debug_print_file();
             // }
-            // if ui.button("Stop").clicked() {
-            //     self.bp_client.as_mut().unwrap().stop();
+            // if ui.button("Display File Backwards").clicked() {
+            //     self.bp_parser.debug_print_file_rev();
             // }
-            if ui.button("Display File").clicked() {
-                // let path = Path::new("filetest.txt");
-                // let display = path.display();
-
-                // let mut file = match File::open(&path) {
-                //     Err(why) => panic!("couldn't open {}: {}", display, why),
-                //     Ok(file) => file,
-                // };
-
-                // self.file_text = Some(String::new());
-                // match file.read_to_string(&mut self.file_text.as_mut().unwrap()) {
-                //     Err(why) => panic!("couldn't read {}: {}", display, why),
-                //     Ok(_) => print!(
-                //         "{} contains:\n{}",
-                //         display,
-                //         self.file_text.as_mut().unwrap()
-                //     ),
-                // };
-                // println!("\n");
-                self.bp_parser.debug_print_file();
-            }
-            if ui.button("Display File Backwards").clicked() {
-                self.bp_parser.debug_print_file_rev();
-            }
             //Debug panel
             ui.add(egui::Slider::new(&mut self.debug_event_millis, 100..=5000).text("Debug Event Duration (millis)"));
             ui.add(egui::Slider::new(&mut self.debug_event_strength, 0.001..=1.0).text("Debug Event Strength"));
@@ -1028,7 +1003,7 @@ impl eframe::App for MyApp {
                 BPSimEvent::new(Duration::from_millis(self.debug_event_millis), BPActionType::Vibrate { strength: self.debug_event_strength, motor: -1 as i8 })
               )
             }
-            
+            ui.label(format!("Vibrator states: {:?}", self.debug_stats_vibrator_motor_states));
             // ui.label(format!("Hello '{}', age {}", self.name, self.age));
             ui.label(format!("Ticks passed: {}", self.update_ticks));
             // match &self.file_text {
