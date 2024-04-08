@@ -17,7 +17,8 @@ tracing-subscriber = "0.3.16"
 
 # Because buttplug needs Async stuff, specifically Tokio
 tokio = { version = "1.23.0", features = ["full"] }
-
+# Fixes exploit https://seanmonstar.com/blog/hyper-http2-continuation-flood/
+h2 = "0.3.26"
 eframe = "0.26.2"
 # For image support:
 egui_extras = {version = "0.26.2", features = ["default", "image"] }
