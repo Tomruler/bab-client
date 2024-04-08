@@ -25,6 +25,7 @@ env_logger = { version = "0.10", default-features = false, features = [
     "auto-color",
     "humantime",
 ] }
+image = "0.25.1"
 
 # Utilities
 rev_lines = "0.3.0"

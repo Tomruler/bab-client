@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
                                                                    //IO
 use eframe::egui::debug_text::print;
+use eframe::egui::viewport;
 use eframe::egui::IconData;
 use futures::future::UnwrapOrElse;
+use image::DynamicImage;
 use rev_lines::RevLines;
 use std::collections::VecDeque;
 use std::fs::File;
@@ -16,6 +18,7 @@ use std::path::PathBuf;
 //UI
 use eframe::egui;
 use tokio::{runtime::Runtime, time};
+use image::io::Reader as ImageReader;
 //Timing
 use std::time::{Duration, Instant, SystemTime};
 //Math
@@ -409,7 +412,7 @@ impl BPCommand
 {
     pub fn new(command_string : String) -> Option<BPCommand>
     {
-        println!("Converting {} into a command", command_string);
+        // println!("Converting {} into a command", command_string);
         
         if command_string == ""
         {
@@ -630,7 +633,7 @@ impl BPDataParser
                     return event_queue;
                 },
                 Ok(line_str) => {
-                    println!("{}", line_str);
+                    // println!("{}", line_str);
                     line_str
                 },
             };
@@ -650,7 +653,7 @@ impl BPDataParser
                             println!("Reached front of first read");
                         }
                         else {
-                            println!("Reached end of new events.");
+                            // println!("Reached end of new events.");
                             break;
                         }
                     }
@@ -1024,8 +1027,30 @@ impl eframe::App for MyApp {
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    // ?.decode()?;
+    //TODO: Get icon loading working
+    let img = match ImageReader::open("bab_logo_256_256.png")
+    {
+        Err(_) => {
+            println!("Could not open icon image.");
+            DynamicImage::new_rgba8(256, 256)
+        }
+        Ok(reader) => {
+            match reader.decode()
+            {
+                Err(_) => {
+                    println!("Error decoding icon image.");
+                    DynamicImage::new_rgba8(256, 256)
+                }
+                Ok(dyn_image) => {
+                    dyn_image
+                }
+            }
+        }
+    };
+    let icon = viewport::IconData{rgba: img.to_rgba8().into_raw(), width: 256, height: 256};
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([315.0, 480.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([315.0, 480.0]).with_icon(icon),
         // icon_data: Some(eframe::epi::IconData {
         //     rgba: icon.into_raw(),
         //     width: icon_width,
