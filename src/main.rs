@@ -1028,7 +1028,9 @@ impl eframe::App for MyApp {
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
     // ?.decode()?;
-    //TODO: Get icon loading working
+    // if cfg!(windows) { 
+    //     windres::Build::new().compile("resource.rc").unwrap();
+    //   }
     let img = match ImageReader::open("bab_logo_256_256.png")
     {
         Err(_) => {
