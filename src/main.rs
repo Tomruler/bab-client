@@ -145,8 +145,11 @@ impl BPSimulator {
             }
             BPActionType::Power { strength, motor } => {
                 println!("Adding vibration power event");
-                //TODO: End all other power events
-                self.finish_power_events();
+                //End all other power events if intensity is 0
+                if strength == (0 as f64)
+                {
+                    self.finish_power_events();
+                }
                 self.update_intensity_floor(motor, strength);
             }
             BPActionType::Stop => {
