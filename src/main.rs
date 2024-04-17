@@ -32,8 +32,8 @@ use buttplug::{
         connector::new_json_ws_client_connector, message::ClientGenericDeviceMessageAttributes,
     },
 };
-
-const EVENT_POWER_DURATION:Duration = Duration::from_secs(300);
+// Set extremely long so that power events cancelling eachother out don't run out midgame. Bug occurs if game lasts longer than 1 day.
+const EVENT_POWER_DURATION:Duration = Duration::from_secs(86400);
 
 // use buttplug::core::connector::ButtplugConnectorError;
 #[derive(Debug)]
@@ -569,7 +569,7 @@ impl BPCommand
                         *m_index as i8
                     }
                 };
-                return Some(BPSimEvent::new(EVENT_POWER_DURATION, BPActionType::Vibrate { strength: strength, motor: motor_index }));
+                return Some(BPSimEvent::new(EVENT_POWER_DURATION, BPActionType::Power { strength: strength, motor: motor_index }));
             },
             _ =>{
                 println!("Unrecognized command: {}", self.event_name);
@@ -653,6 +653,7 @@ impl BPDataParser
                         //Edge case: most recent command is earlier than the furthest reached -> new game has happened
                         if events_read == 1 && cmd.game_frame < self.prev_reached_frame
                         {
+                            println!("Most recent command goes back in time. Assuming new game has occured and resetting frame counter");
                             self.reset_state_for_new_game(cmd.game_frame);
                         }
                         //Edge case: if there is an event on the initial frame (0), don't skip it.
@@ -1386,4 +1387,100 @@ async fn device_stop(client: &ButtplugClient) -> Result<(), ButtplugClientError>
   client_device.stop().await?;
   println!("Stopped");
   Ok(())
+}
+
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+// This is a really bad adding function, its purpose is to fail in this
+// example.
+#[allow(dead_code)]
+fn bad_add(a: i32, b: i32) -> i32 {
+    a - b
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    #[test]
+    fn test_add() {
+        assert_eq!(add(1, 2), 3);
+    }
+
+    #[test]
+    fn test_bad_add() {
+        // This assert would fire and test will fail.
+        // Please note, that private functions can be tested too!
+        assert_eq!(bad_add(1, 2), 3);
+    }
+    // BP Sim Event
+    #[test]
+    fn test_bp_sim_event_new_vibrate() {
+        let bp_sim_event = BPSimEvent::new(Duration::from_millis(500), BPActionType::Vibrate{ strength: 0.0, motor: -1 });
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+    }
+    #[test]
+    #[ignore]
+    fn test_bp_sim_event_new_stroke() {
+        let bp_sim_event = BPSimEvent::new(Duration::from_millis(500), BPActionType::Stroke{});
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Stroke{}));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+    }
+    #[test]
+    fn test_bp_sim_event_new_stop() {
+        let bp_sim_event = BPSimEvent::new_stop_event();
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Stop));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", true));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::ZERO));
+    }
+    #[test]
+    fn test_bp_sim_event_pass_partial_time() {
+        let mut bp_sim_event = BPSimEvent::new(Duration::from_millis(500), BPActionType::Vibrate{ strength: 0.0, motor: -1 });
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+        bp_sim_event.pass_time(Duration::from_millis(250));
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(250)));
+    }
+    #[test]
+    fn test_bp_sim_event_pass_full_time() {
+        let mut bp_sim_event = BPSimEvent::new(Duration::from_millis(500), BPActionType::Vibrate{ strength: 0.0, motor: -1 });
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+        bp_sim_event.pass_time(Duration::from_millis(500));
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", true));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::ZERO));
+    }
+    #[test]
+    fn test_bp_sim_event_pass_no_time() {
+        let mut bp_sim_event = BPSimEvent::new(Duration::from_millis(500), BPActionType::Vibrate{ strength: 0.0, motor: -1 });
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+        bp_sim_event.pass_time(Duration::ZERO);
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+    }
+    #[test]
+    fn test_bp_sim_event_pass_very_long_time() {
+        let mut bp_sim_event = BPSimEvent::new(Duration::from_millis(500), BPActionType::Vibrate{ strength: 0.0, motor: -1 });
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+        bp_sim_event.pass_time(Duration::from_secs(86400));
+        assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+        assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", true));
+        assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::ZERO));
+    }
 }
