@@ -79,7 +79,15 @@ impl BPSimEvent {
                 self.finished = true;
                 Duration::ZERO
             }
-            Some(time_left) => time_left,
+            Some(time_left) => {
+                if time_left == Duration::ZERO{
+                    self.finished = true;
+                    Duration::ZERO
+                }
+                else {
+                    time_left
+                }
+            },
         }
     }
     pub fn force_finish(&mut self)
@@ -427,7 +435,7 @@ impl BPCommand
             println!("This string is a single newline!");
             return None;
         }
-        let mut cmd_iter = command_string.split(" ");
+        let mut cmd_iter = command_string.split_whitespace();
         
         let frame = match cmd_iter.next()
         {
@@ -1411,6 +1419,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_bad_add() {
         // This assert would fire and test will fail.
         // Please note, that private functions can be tested too!
@@ -1482,5 +1491,108 @@ mod tests {
         assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
         assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", true));
         assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::ZERO));
+    }
+    //BP Command
+    #[test]
+    fn test_bp_command_new() {
+        let bp_command_op = BPCommand::new("0 RESET".to_string());
+        match bp_command_op
+        {
+            None => assert!(false, "This command should exist"),
+            Some(bpcom) => {
+                assert_eq!(format!("{:?}", bpcom.game_frame), format!("{:?}", 0));
+                assert_eq!(format!("{:?}", bpcom.event_name), format!("{:?}", "RESET"));
+                let correct_command_args: HashMap<String, f64> = HashMap::new();
+                assert_eq!(format!("{:?}", bpcom.command_args), format!("{:?}", correct_command_args));
+                // assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+                // assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+                // assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+            }
+        }
+    }
+    #[test]
+    fn test_bp_command_new_with_args() {
+        let bp_command_op = BPCommand::new("0 VIBRATE Duration:5 Motor:-1 Strength:0.2".to_string());
+        match bp_command_op
+        {
+            None => assert!(false, "This command should exist"),
+            Some(bpcom) => {
+                assert_eq!(format!("{:?}", bpcom.game_frame), format!("{:?}", 0));
+                assert_eq!(format!("{:?}", bpcom.event_name), format!("{:?}", "VIBRATE"));
+                let mut correct_command_args: HashMap<String, f64> = HashMap::new();
+                correct_command_args.insert("Duration".to_string(), 5 as f64);
+                correct_command_args.insert("Motor".to_string(), -1 as f64);
+                correct_command_args.insert("Strength".to_string(), 0.2 as f64);
+                assert_eq!(bpcom.command_args.get("Duration").unwrap(), correct_command_args.get("Duration").unwrap());
+                assert_eq!(bpcom.command_args.get("Motor").unwrap(), correct_command_args.get("Motor").unwrap());
+                assert_eq!(bpcom.command_args.get("Strength").unwrap(), correct_command_args.get("Strength").unwrap());
+                // assert_eq!(format!("{:?}", bp_sim_event.action), format!("{:?}", BPActionType::Vibrate{ strength: 0.0, motor: -1 }));
+                // assert_eq!(format!("{:?}", bp_sim_event.finished), format!("{:?}", false));
+                // assert_eq!(format!("{:?}", bp_sim_event.time_remaining), format!("{:?}", Duration::from_millis(500)));
+            }
+        }
+    }
+    #[test]
+    fn test_bp_command_empty() {
+        let bp_command_op = BPCommand::new("".to_string());
+        match bp_command_op
+        {
+            None => {assert!(false, "Check prints");},
+            Some(bpcom) => {
+                assert!(false, "This command shouldn't exist");
+            },
+        }
+    }
+    #[test]
+    fn test_bp_command_no_frame_num() {
+        let bp_command_op = BPCommand::new("abcd".to_string());
+        match bp_command_op
+        {
+            None => {assert!(false, "Check prints");},
+            Some(bpcom) => {
+                assert!(false, "This command shouldn't exist");
+            },
+        }
+    }
+    #[test]
+    fn test_bp_command_missing_command() {
+        let bp_command_op = BPCommand::new("1234".to_string());
+        match bp_command_op
+        {
+            None => {assert!(false, "Check prints");},
+            Some(bpcom) => {
+                assert!(false, "This command shouldn't exist");
+            },
+        }
+    }
+    #[test]
+    fn test_bp_command_excessive_leading_whitespace() {
+        let bp_command_op = BPCommand::new(" 0 RESET".to_string());
+        match bp_command_op
+        {
+            None => {
+                assert!(false, "Check prints");
+            },
+            Some(bpcom) => {
+                assert_eq!(format!("{:?}", bpcom.game_frame), format!("{:?}", 0));
+                assert_eq!(format!("{:?}", bpcom.event_name), format!("{:?}", "RESET"));
+                let correct_command_args: HashMap<String, f64> = HashMap::new();
+                assert_eq!(format!("{:?}", bpcom.command_args), format!("{:?}", correct_command_args));
+            },
+        }
+    }
+    #[test]
+    fn test_bp_command_excessive_trailing_whitespace() {
+        let bp_command_op = BPCommand::new("0 RESET     ".to_string());
+        match bp_command_op
+        {
+            None => {},
+            Some(bpcom) => {
+                assert_eq!(format!("{:?}", bpcom.game_frame), format!("{:?}", 0));
+                assert_eq!(format!("{:?}", bpcom.event_name), format!("{:?}", "RESET"));
+                let correct_command_args: HashMap<String, f64> = HashMap::new();
+                assert_eq!(format!("{:?}", bpcom.command_args), format!("{:?}", correct_command_args));
+            },
+        }
     }
 }
